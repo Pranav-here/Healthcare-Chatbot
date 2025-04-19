@@ -34,7 +34,7 @@ MedicQuery Bot is an intelligent Retrieval-Augmented Generation (RAG) chatbot bu
 .
 ├── data/                       # PDF medical textbooks
 ├── vectorstore/               # FAISS index and vectors
-├── app.py                     # Streamlit frontend
+├── medical-chatbot.py                     # Streamlit frontend
 ├── create_memory_for_llm.py   # PDF loader, chunker, embedding generator
 ├── connect_memory_with_llm.py # CLI-based query pipeline
 ├── requirements.txt / Pipfile # Python dependencies
