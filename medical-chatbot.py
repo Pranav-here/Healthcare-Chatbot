@@ -72,7 +72,7 @@ def format_source_documents(docs):
 
 # main Streamlit app
 def main():
-    st.title("️Ask Medibot!🩺🧑‍⚕")  # app title
+    st.title("️Ask MedicQuery!🩺🧑‍⚕")  # app title
 
     # initialize message history
     if 'messages' not in st.session_state:
