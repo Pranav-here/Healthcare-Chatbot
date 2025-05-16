@@ -5,10 +5,10 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 import os
 from langchain_huggingface import HuggingFaceEndpoint
+import re
 
 # path to saved vector DB
-DB_FAISS_PATH = os.path.join(os.path.dirname(__file__), "vectorstore", "db_faiss")
-
+DB_FAISS_PATH = 'vectorstore/db_faiss'
 # load token from environment variable
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
@@ -40,30 +40,39 @@ def load_llm(huggingface_repo_id, HF_TOKEN):
 
 
 # format source documents for clean display in chat
+def clean_text(text):
+    """Clean up bad characters from scanned PDFs."""
+    text = re.sub(r'[^\x00-\x7F]+', ' ', text)  # remove non-ASCII
+    text = re.sub(r'\s+', ' ', text).strip()   # collapse extra whitespace
+    return text
+
 def format_source_documents(docs):
     formatted = []
     for i, doc in enumerate(docs, 1):
+        # Source metadata
         source_path = doc.metadata.get('source', 'Unknown Source')
-        book_name = source_path.split('\\')[-1].split('.pdf')[0].replace('_', ' ')
+        book_name = source_path.split('/')[-1].split('\\')[-1].split('.pdf')[0].replace('_', ' ')
         page_number = doc.metadata.get('page_label', doc.metadata.get('page', 'N/A'))
 
-        # Clean up text and limit size
-        content = ' '.join(doc.page_content.split()).strip()
+        # Content cleanup
+        content = clean_text(doc.page_content)
         if len(content) > 300:
             content = content[:300] + '...'
 
+        # Markdown formatting
         formatted.append(
-            f"**📚 Source {i}**\n"
-            f"- **Book:** {book_name}\n"
-            f"- **Page:** {page_number}\n"
-            f"- **Content:** {content}\n"
+            f"### 📚 Source {i}\n"
+            f"**Book:** *{book_name}*\n\n"
+            f"**Page:** {page_number}\n\n"
+            f"**Excerpt:**\n> {content}\n"
         )
-    return '\n'.join(formatted)
+
+    return "\n---\n".join(formatted)
 
 
 # main Streamlit app
 def main():
-    st.title("Ask Chatbot!")  # app title
+    st.title("️Ask Medibot!🩺🧑‍⚕")  # app title
 
     # initialize message history
     if 'messages' not in st.session_state:
