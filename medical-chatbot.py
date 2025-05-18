@@ -5,6 +5,8 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 import os
 from langchain_huggingface import HuggingFaceEndpoint
+from transformers import pipeline
+from langchain.llms import HuggingFacePipeline
 import re
 
 # path to saved vector DB
@@ -26,6 +28,14 @@ def set_custom_prompt(custom_prompt_template):
     prompt = PromptTemplate(template=custom_prompt_template, input_variables=["context", "question"])
     return prompt
 
+def load_llm_local_cpu():
+    pipe = pipeline(
+        "text-generation",
+        model="mistralai/Mistral-7B-Instruct-v0.3",
+        device=-1  # Force CPU
+    )
+    llm = HuggingFacePipeline(pipeline=pipe)
+    return llm
 
 # load the Mistral model from Hugging Face
 def load_llm(huggingface_repo_id, HF_TOKEN):
@@ -113,7 +123,8 @@ def main():
 
             # build the QA chain
             qa_chain = RetrievalQA.from_chain_type(
-                llm=load_llm(huggingface_repo_id=huggingface_repo_id, HF_TOKEN=HF_TOKEN),
+                # llm=load_llm(huggingface_repo_id=huggingface_repo_id, HF_TOKEN=HF_TOKEN),
+                llm = load_llm_local_cpu(),
                 chain_type="stuff",
                 retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
                 return_source_documents=True,
