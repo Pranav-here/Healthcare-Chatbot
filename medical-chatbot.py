@@ -34,7 +34,7 @@ def load_llm(huggingface_repo_id, HF_TOKEN):
         task="text-generation",
         temperature=0.5,
         huggingfacehub_api_token=HF_TOKEN,
-        model_kwargs={"max_length": 512}
+        model_kwargs={"max_length": 512, "device_map": "cpu"}
     )
     return llm
 
