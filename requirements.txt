@@ -7,4 +7,4 @@ transformers
 sentence-transformers
 faiss-cpu
 pypdf
-regex
+torch==2.2.0+cpu --index-url https://download.pytorch.org/whl/cpu
