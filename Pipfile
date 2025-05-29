@@ -4,11 +4,12 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-langchain = "*"
-langchain-community = "*"
-langchain-huggingface = "*"
-faiss-cpu = "*"
+python-dotenv = "*"
 streamlit = "*"
+langchain = "*"
+langchain-huggingface = "*"
+langchain-community = "*"
+faiss-cpu = "*"
 numpy = "*"
 
 [dev-packages]

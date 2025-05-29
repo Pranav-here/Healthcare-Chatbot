@@ -1,149 +1,150 @@
 import streamlit as st
 from langchain.chains import RetrievalQA
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings, HuggingFaceEndpoint
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 import os
-from langchain_huggingface import HuggingFaceEndpoint
 import re
 
-# path to saved vector DB
+# Configuration
 DB_FAISS_PATH = 'vectorstore/db_faiss'
-# load token from environment variable
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
-
-# load the saved FAISS vector DB with embedding model
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_vector_store():
     embedding_model = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
-    db = FAISS.load_local(DB_FAISS_PATH, embedding_model, allow_dangerous_deserialization=True)
-    return db
-
-
-# make a prompt template using Langchain format
-def set_custom_prompt(custom_prompt_template):
-    prompt = PromptTemplate(template=custom_prompt_template, input_variables=["context", "question"])
-    return prompt
-
-
-# load the Mistral model from Hugging Face
-def load_llm(huggingface_repo_id, HF_TOKEN):
-    llm = HuggingFaceEndpoint(
-        repo_id=huggingface_repo_id,
-        task="text-generation",
-        temperature=0.5,
-        huggingfacehub_api_token=HF_TOKEN,
-        model_kwargs={"max_length": 512}
+    return FAISS.load_local(
+        DB_FAISS_PATH,
+        embedding_model,
+        allow_dangerous_deserialization=True
     )
-    return llm
 
+def set_custom_prompt():
+    return PromptTemplate(
+        template="""
+<s>[INST]
+You are a professional medical assistant. Your task is to answer user questions using only the context provided.
 
-# format source documents for clean display in chat
+You MUST follow these rules:
+- ❌ Do NOT rephrase or restate the user's question.
+- ❌ Do NOT start with "The text suggests" or "Based on the context".
+- ❌ Do NOT generate a summary or paraphrased version of the question.
+- ❌ Do NOT include general advice, unless directly stated in the context.
+- ✅ Answer directly, using only information from the context.
+- ✅ Provide a clear and medically sound explanation
+- ✅ Use layman's terms unless otherwise stated
+- ✅ Reference which source document supports your answer
+- ❌ Do NOT fabricate or assume symptoms not in the context
+- ❌ Do NOT tell the user to write a diary or journal unless specifically asked
+- ✅ If the context does not contain the answer, respond exactly: 
+"I cannot determine from the provided information."
+
+---
+
+Context:
+{context}
+
+Question:
+{question}
+[/INST]
+""",
+        input_variables=["context", "question"]
+    )
+
+def load_llm():
+    return HuggingFaceEndpoint(
+        repo_id="HuggingFaceH4/zephyr-7b-beta",
+        task="text-generation",
+        temperature=0.3,
+        max_new_tokens=512,
+        top_p=0.95,
+        repetition_penalty=1.15,
+        return_full_text=False,
+        huggingfacehub_api_token=HF_TOKEN
+    )
+
 def clean_text(text):
-    """Clean up bad characters from scanned PDFs."""
-    text = re.sub(r'[^\x00-\x7F]+', ' ', text)  # remove non-ASCII
-    text = re.sub(r'\s+', ' ', text).strip()   # collapse extra whitespace
-    return text
+    text = re.sub(r'[^\x00-\x7F]+', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip()
 
 def format_source_documents(docs):
-    formatted = []
+    if not docs:
+        return "_No supporting sources found._"
+
+    seen = set()
+    sources = []
     for i, doc in enumerate(docs, 1):
-        # Source metadata
-        source_path = doc.metadata.get('source', 'Unknown Source')
-        book_name = source_path.split('/')[-1].split('\\')[-1].split('.pdf')[0].replace('_', ' ')
-        page_number = doc.metadata.get('page_label', doc.metadata.get('page', 'N/A'))
+        meta = doc.metadata
+        source_path = meta.get('source', 'Unknown').replace('\\', '/')
+        book_name = os.path.basename(source_path).split('.pdf')[0].replace('_', ' ')
+        page = meta.get('page_label') or meta.get('page', 'N/A')
+        content = clean_text(doc.page_content)[:300]
 
-        # Content cleanup
-        content = clean_text(doc.page_content)
-        if len(content) > 300:
-            content = content[:300] + '...'
+        key = (book_name, page)
+        if key in seen:
+            continue
+        seen.add(key)
 
-        # Markdown formatting
-        formatted.append(
-            f"### 📚 Source {i}\n"
-            f"**Book:** *{book_name}*\n\n"
-            f"**Page:** {page_number}\n\n"
-            f"**Excerpt:**\n> {content}\n"
+        sources.append(
+            f"**📖 Source {i}**\n"
+            f"- **Document**: `{book_name}`\n"
+            f"- **Page**: {page}\n"
+            f"- **Excerpt**: {content}..."
         )
+    return "\n\n".join(sources)
 
-    return "\n---\n".join(formatted)
+def render_answer(answer, sources_md):
+    return f"""
+### ✅ Summary:
+{answer}
 
+---
 
-# main Streamlit app
+### 📚 Supporting Sources:
+{sources_md}
+
+---
+
+⚠️ *Disclaimer: This tool is for informational purposes only. Always consult a licensed medical professional for any diagnosis or treatment.*
+"""
+
 def main():
-    st.title("️Ask Medibot!🩺🧑‍⚕")  # app title
+    st.title("🩺 Ask MedicQuery")
+    st.caption("Medical information assistant - Always consult a real doctor for medical decisions")
 
-    # initialize message history
     if 'messages' not in st.session_state:
         st.session_state.messages = []
 
-    # show past messages
-    for message in st.session_state.messages:
-        st.chat_message(message['role']).markdown(message['content'])
+    for msg in st.session_state.messages:
+        st.chat_message(msg['role']).markdown(msg['content'])
 
-    # input box for the user
-    prompt = st.chat_input('Pass your prompt here: ')
-    if prompt:
-        # display and store user message
-        st.chat_message('user').markdown(prompt)
+    if prompt := st.chat_input("Ask your medical question:"):
+        st.chat_message("user").markdown(prompt)
         st.session_state.messages.append({'role': 'user', 'content': prompt})
 
-        # chatbot prompt logic
-        custom_prompt_template = """You are a highly intelligent and helpful AI medical assistant. Your job is to answer user queries based strictly on the context provided below.
-
-        Follow these rules:
-        - Use only the information provided in the context to form your answer.
-        - If the answer cannot be determined from the context, respond with: "I'm not sure based on the provided information."
-        - Do NOT fabricate or infer facts that are not explicitly present.
-        - Be clear, direct, and avoid unnecessary small talk.
-        - Format your answer in complete, professional sentences.
-
-        Context: {context}
-
-        Question: {question}
-
-        Answer:"""
-
-        huggingface_repo_id = "mistralai/Mistral-7B-Instruct-v0.3"
-
         try:
-            # load vector database
-            vectorstore = get_vector_store()
+            with st.spinner("Retrieving information..."):
+                vectorstore = get_vector_store()
+                qa_chain = RetrievalQA.from_chain_type(
+                    llm=load_llm(),
+                    chain_type="stuff",
+                    retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
+                    return_source_documents=True,
+                    chain_type_kwargs={"prompt": set_custom_prompt()}
+                )
 
-            # build the QA chain
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=load_llm(huggingface_repo_id=huggingface_repo_id, HF_TOKEN=HF_TOKEN),
-                chain_type="stuff",
-                retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
-                return_source_documents=True,
-                chain_type_kwargs={'prompt': set_custom_prompt(custom_prompt_template)}
-            )
+                response = qa_chain.invoke({"query": prompt})
+                answer = response.get("result", "No answer returned.")
+                sources_md = format_source_documents(response.get("source_documents", []))
+                formatted = render_answer(answer, sources_md)
 
-            # get the answer from the bot
-            response = qa_chain.invoke({'query': prompt})
-
-            # format the output
-            answer = response['result']
-            sources = format_source_documents(response["source_documents"])
-
-            formatted_response = (
-                f"**Answer:**\n{answer}\n\n"
-                f"---\n"
-                f"⚠️ *Disclaimer: This response is based on the provided material and should not be taken as medical advice. Please consult a licensed healthcare professional for real-world concerns.*\n\n"
-                f"---\n"
-                f"**Supporting Sources:**\n"
-                f"{sources}"
-            )
-
-            # display bot message and store it
-            st.chat_message('assistant').markdown(formatted_response)
-            st.session_state.messages.append({'role': 'assistant', 'content': formatted_response})
+            st.chat_message("assistant").markdown(formatted)
+            st.session_state.messages.append({'role': 'assistant', 'content': formatted})
 
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            error_msg = f"⚠️ **Error:** Something went wrong. Please try again or rephrase your question.\n\n*Details: {str(e)}*"
+            st.error(error_msg)
+            st.session_state.messages.append({'role': 'assistant', 'content': error_msg})
 
-
-# run the app
 if __name__ == "__main__":
     main()
