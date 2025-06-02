@@ -106,7 +106,7 @@ python connect_memory_with_llm.py
 ##  Launch the Chat UI
 
 ```bash
-streamlit run app.py
+streamlit run medical-chatbot.py
 ```
 
 ---
