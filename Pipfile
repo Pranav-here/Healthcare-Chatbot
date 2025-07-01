@@ -6,11 +6,16 @@ name = "pypi"
 [packages]
 python-dotenv = "*"
 streamlit = "*"
-langchain = "*"
-langchain-huggingface = "*"
-langchain-community = "*"
 faiss-cpu = "*"
 numpy = "*"
+
+# 🔒 Pin these to avoid version errors
+langchain = "==0.3.12"
+langchain-community = "==0.3.12"
+langchain-core = "==0.3.63"
+langchain-huggingface = "==0.1.2"
+langchain-text-splitters = "==0.3.8"
+huggingface-hub = "==0.27.0"
 
 [dev-packages]
 
